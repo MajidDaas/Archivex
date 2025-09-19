@@ -3,45 +3,49 @@ from flask import Flask, render_template, redirect, url_for, session, request, a
 # Import from google_auth_oauthlib.flow correctly
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
+from google.oauth2 import id_token  # Import id_token at the top
 import os
 # import json # Not used in this snippet
 # from io import BytesIO # Not used in this snippet
 
 # Import configuration and utilities
-from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, TABS, get_user_access
+# Ensure USER_ROLES is imported for demo_login
+from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, TABS, get_user_access, USER_ROLES
 from drive_utils import build_drive_service, search_files, upload_file
 
 app = Flask(__name__)
 # Use the secret key from config.py, which loads from environment variables
-# Hardcoding it like this is less secure
-app.secret_key = SECRET_KEY # Use the one from config
+app.secret_key = SECRET_KEY
+# Set session type (optional but can help)
+app.config['SESSION_TYPE'] = 'filesystem'
 
 # ⚠️ ONLY FOR LOCAL DEVELOPMENT — REMOVE IN PRODUCTION
 # This should ideally be handled by an environment check
 # os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # --- Google OAuth2 Flow Setup ---
-# --- FIX 1: Remove ALL trailing spaces from URLs and scopes ---
-# --- FIX 2: Update redirect URIs for PythonAnywhere ---
+# --- CRITICAL FIXES:
+# 1. Remove ALL trailing spaces from URLs, scopes, and redirect URIs
+# 2. Ensure redirect URIs match your PythonAnywhere domain
 flow = Flow.from_client_config(
     client_config={
         "web": {
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            # --- FIX 1a: Removed trailing spaces ---
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",  # No trailing space
-            "token_uri": "https://oauth2.googleapis.com/token",      # No trailing space
-            # --- FIX 2a: Update redirect URI for PythonAnywhere ---
+            # --- FIX 1a: Removed ALL trailing spaces ---
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",  # No trailing spaces
+            "token_uri": "https://oauth2.googleapis.com/token",      # No trailing spaces
+            # --- FIX 2a: Update redirect URI for PythonAnywhere, No trailing spaces ---
             "redirect_uris": ["https://majiddaas.pythonanywhere.com/callback"] # Match your domain
         }
     },
     scopes=[
         'openid',
-        # --- FIX 1b: Removed trailing spaces from scopes ---
-        'https://www.googleapis.com/auth/userinfo.email', # No trailing space
-        'https://www.googleapis.com/auth/drive.file'    # No trailing space, Scope for uploading files
+        # --- FIX 1b: Removed ALL trailing spaces from scopes ---
+        'https://www.googleapis.com/auth/userinfo.email', # No trailing spaces
+        'https://www.googleapis.com/auth/drive.file'    # No trailing spaces, Scope for uploading files
     ],
-    # --- FIX 2b: Update redirect_uri for PythonAnywhere ---
+    # --- FIX 2b: Update redirect_uri for PythonAnywhere, No trailing spaces ---
     redirect_uri='https://majiddaas.pythonanywhere.com/callback' # Match your domain
 )
 
@@ -62,28 +66,50 @@ def login():
         include_granted_scopes='true'
     )
     session['state'] = state
-    print(f"🔐 [DEBUG] Generated Google Auth URL: {authorization_url}")
-    # --- RENDER index.html INSTEAD ---
+    print(f"🔐 [LOGIN] Generated Google Auth URL: {authorization_url}")
+    print(f"🔐 [LOGIN] State generated and stored in session: {state}")
+    # --- RENDER index.html and pass the auth_url ---
     return render_template('index.html', auth_url=authorization_url)
-    
+
 @app.route('/callback')
 def callback():
+    print(f"🔍 [CALLBACK] Callback accessed. Request args: {request.args}")
+    print(f"🔍 [CALLBACK] Current session contents: {dict(session)}")
+
+    # --- Check for 'state' in session ---
     if 'state' not in session:
-        abort(400, description="State parameter missing.")
-    if session['state'] != request.args.get('state'):
-        abort(400, description="State mismatch.")
+        print("❌ [CALLBACK] ABORT: 'state' parameter missing from session!")
+        abort(400, description="State parameter missing from session.")
+    
+    # --- Get 'state' from request args ---
+    request_state = request.args.get('state')
+    if not request_state:
+        print("❌ [CALLBACK] ABORT: 'state' parameter missing from request URL!")
+        abort(400, description="State parameter missing from request URL.")
+
+    # --- Compare states ---
+    session_state = session['state']
+    if session_state != request_state:
+        print(f"❌ [CALLBACK] ABORT: State mismatch! Session: {session_state}, Request: {request_state}")
+        abort(400, description="State mismatch between session and request.")
+
+    print("✅ [CALLBACK] State validation passed.")
 
     try:
         # --- Fetch Token and Get User Info ---
+        print(f"🔄 [CALLBACK] Fetching token with URL: {request.url}")
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
+        print("✅ [CALLBACK] Token fetched successfully.")
 
-        from google.oauth2 import id_token
+        # Verify ID token
+        print("🔍 [CALLBACK] Verifying ID token...")
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             Request(),
             GOOGLE_CLIENT_ID
         )
+        print(f"✅ [CALLBACK] ID token verified. User: {id_info.get('email')}")
 
         # --- Store User Info and Credentials in Session ---
         session['email'] = id_info['email']
@@ -94,24 +120,31 @@ def callback():
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET
         }
+        print(f"💾 [CALLBACK] User session data stored for {session['email']}")
 
         # --- Check Access ---
         access = get_user_access(session['email'])
+        print(f"🛂 [CALLBACK] User access checked: {access}")
         if not access['tabs']:
+            print(f"🚫 [CALLBACK] Access denied for {session['email']}. Clearing session.")
             session.clear()
             return "Access denied. Contact administrator.", 403
 
+        print(f"✅ [CALLBACK] Successful login for {session['email']}. Redirecting to index.")
         return redirect(url_for('index'))
 
     except Exception as e:
-        print(f"❌ [ERROR] OAuth callback failed: {e}")
+        print(f"❌ [CALLBACK] OAuth callback failed: {e}")
         # It's better to flash a message or redirect to an error page
         session.clear()
-        return "Authentication failed. Please try again.", 400
+        # Redirect back to index with an error message (handled by template or JS)
+        return redirect(url_for('index', error="Authentication failed. Please try again."))
 
 @app.route('/logout')
 def logout():
+    email = session.get('email')
     session.clear()
+    print(f"👋 [LOGOUT] User {email} logged out.")
     return redirect(url_for('index'))
 
 # --- JSON API Endpoints ---
@@ -149,7 +182,7 @@ def api_tab_files(tab_name):
         files = search_files(drive_service, folder_id, search_term)
         return jsonify({"files": files})
     except Exception as e:
-        print(f"❌ [ERROR] Failed to search files: {e}")
+        print(f"❌ [API/FILES] Failed to search files: {e}")
         return jsonify({"error": "Failed to load files. Please try again."}), 500
 
 @app.route('/api/tab/<tab_name>/upload', methods=['POST'])
@@ -184,7 +217,7 @@ def api_upload_file(tab_name):
             }
         })
     except Exception as e:
-        print(f"❌ [ERROR] Upload failed: {e}")
+        print(f"❌ [API/UPLOAD] Upload failed: {e}")
         return jsonify({"error": "Upload failed. Please try again."}), 500
 
 # --- Error Handlers ---
@@ -197,9 +230,14 @@ def not_found(e):
 def forbidden(e):
     return jsonify({"error": "Forbidden"}), 403
 
-# Remove or comment out the if __name__ == '__main__' block for PythonAnywhere
-# if __name__ == '__main__':
-#     app.run(debug=True, host='0.0.0.0', port=5000)
+@app.errorhandler(400)
+def bad_request(e):
+    # Provide a more detailed error message for debugging
+    description = getattr(e, 'description', 'Bad Request')
+    print(f"🚨 [ERROR 400] {description}")
+    return jsonify({"error": f"Bad Request: {description}"}), 400
+
+# --- Demo Login Route ---
 
 @app.route('/demo_login', methods=['GET', 'POST'])
 def demo_login():
@@ -210,6 +248,7 @@ def demo_login():
     if request.method == 'POST':
         # 1. Get and sanitize the email from the form
         email = request.form.get('email', '').strip()
+        print(f"🔍 [DEMO LOGIN] POST request received for email: '{email}'")
 
         # 2. Check if the email is authorized
         if email and email in USER_ROLES:
@@ -221,24 +260,27 @@ def demo_login():
             session['google_token'] = {
                 'access_token': 'demo_access_token_placeholder',
                 'refresh_token': 'demo_refresh_token_placeholder',
-                # --- CRITICAL FIX: Removed trailing spaces from token_uri ---
+                # --- CRITICAL FIX: Removed trailing spaces ---
                 'token_uri': 'https://oauth2.googleapis.com/token', # No trailing spaces
                 'client_id': GOOGLE_CLIENT_ID,
                 'client_secret': GOOGLE_CLIENT_SECRET
             }
-            print(f"✅ [DEMO] Login successful for {email}")
+            print(f"✅ [DEMO LOGIN] Successful login for {email}")
             # 5. Redirect to the main index page
             return redirect(url_for('index'))
         else:
             # 6. Handle failed login attempt
             error_message = f"Demo login failed for '{email}'. Email not authorized or not in USER_ROLES."
-            print(f"❌ [DEMO] {error_message}")
+            print(f"❌ [DEMO LOGIN] {error_message}")
             # Pass the error message to the template for display
             return render_template('index.html', error=error_message)
 
     # --- GET request handling ---
     # If someone navigates to /demo_login directly (GET), redirect to main page
-    # The demo login form is already on index.html
-    # Alternatively, you could render a separate template here.
+    print("↩️ [DEMO LOGIN] GET request, redirecting to index.")
     return redirect(url_for('index'))
-# --- End of /demo_login route ---
+
+# Remove or comment out the if __name__ == '__main__' block for PythonAnywhere
+# if __name__ == '__main__':
+#     app.run(debug=True, host='0.0.0.0', port=5000)
+
