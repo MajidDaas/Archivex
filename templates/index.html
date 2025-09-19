@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Org File Portal</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div id="app" class="container">
+        <!-- Auth Section -->
+        <div id="auth-section" class="auth-section" style="display: none;">
+            <h1>🔐 Organization File Portal</h1>
+            <p>Secure access to your team’s documents.</p>
+            <a id="login-btn" class="btn btn-primary">Login with Google</a>
+        </div>
+
+        <!-- Main App -->
+        <div id="main-app" style="display: none;">
+            <header>
+                <h1>📁 Organization File Portal</h1>
+                <button id="logout-btn" class="logout-btn">Logout</button>
+            </header>
+
+            <div id="user-email" class="user-email"></div>
+
+            <!-- Flash Messages -->
+            <div id="flash-container" class="flash-messages"></div>
+
+            <!-- Tabs -->
+            <div id="tabs-container" class="tabs"></div>
+
+            <!-- Active Tab Content -->
+            <div id="tab-content">
+                <div id="tab-header">
+                    <h2 id="tab-title"></h2>
+                    <p id="tab-description"></p>
+                </div>
+
+                <!-- Upload -->
+                <div class="upload-section">
+                    <input type="file" id="file-upload" />
+                    <button id="upload-btn" class="btn btn-primary">Upload</button>
+                </div>
+
+                <!-- Search -->
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search inside files..." />
+                    <button id="search-btn">Search</button>
+                </div>
+
+                <!-- Files List -->
+                <div id="loading" style="display: none;">Loading files...</div>
+                <ul id="files-list" class="file-list"></ul>
+                <div id="no-files" style="display: none;">No files found.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ CRITICAL: PASS AUTH URL FROM FLASK TO JAVASCRIPT -->
+    <script>
+        window.APP_CONFIG = {
+            authUrl: {{ auth_url|tojson if auth_url else 'null' }}
+        };
+        console.log("🔧 [DEBUG] Auth URL received from backend:", window.APP_CONFIG.authUrl);
+    </script>
+
+    <!-- Load main app logic -->
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>

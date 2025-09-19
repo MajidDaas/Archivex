@@ -1,0 +1,79 @@
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.venv/
+pyvenv.cfg
+pip-selfcheck.json
+
+# ==============================
+# Flask / Local Development
+# ==============================
+instance/
+*.db
+*.sqlite3
+app.log
+logs/
+
+# ==============================
+# Environment Variables & Secrets
+# ==============================
+.env
+.env.local
+.env.development
+.env.production
+
+# ==============================
+# OS & Editor Files
+# ==============================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==============================
+# Testing
+# ==============================
+.coverage
+htmlcov/
+.nox/
+.tox/
+.pytest_cache/
+
+# ==============================
+# Build & Distribution
+# ==============================
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ==============================
+# Google OAuth Credentials (if stored locally — but shouldn't be!)
+# ==============================
+credentials.json
+token.json
+
+# ==============================
+# Misc
+# ==============================
+*.dump
+*.bak
+*.tmp
