@@ -1,3 +1,4 @@
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,13 +10,28 @@
 <body>
     <div id="app" class="container">
         <!-- Auth Section -->
+        <!-- Initially hidden, shown by JS if user is not authenticated -->
         <div id="auth-section" class="auth-section" style="display: none;">
             <h1>🔐 Organization File Portal</h1>
             <p>Secure access to your team’s documents.</p>
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            <!-- The login button's click handler is in main.js -->
             <a id="login-btn" class="btn btn-primary">Login with Google</a>
+            
+            <!-- Demo Login Form -->
+            <div class="demo-login-form">
+                <p><strong>For Testing (Demo Login):</strong></p>
+                <form method="post" action="/demo_login">
+                    <input type="email" name="email" placeholder="Enter test email" required>
+                    <button type="submit" class="btn btn-secondary">Demo Login</button>
+                </form>
+            </div>
         </div>
 
         <!-- Main App -->
+        <!-- Initially hidden, shown by JS if user is authenticated -->
         <div id="main-app" style="display: none;">
             <header>
                 <h1>📁 Organization File Portal</h1>
@@ -57,10 +73,14 @@
         </div>
     </div>
 
-    <!-- ✅ CRITICAL: PASS AUTH URL FROM FLASK TO JAVASCRIPT -->
+    <!-- ✅ PASS AUTH URL FROM FLASK TO JAVASCRIPT -->
+    <!-- This script block MUST come before main.js is loaded -->
     <script>
+        // Define the global APP_CONFIG object
         window.APP_CONFIG = {
-            authUrl: {{ auth_url|tojson if auth_url else 'null' }}
+            // Use Jinja2's tojson filter for safe serialization
+            // If auth_url is not provided by Flask, it will be null
+            authUrl: {{ auth_url|tojson }}
         };
         console.log("🔧 [DEBUG] Auth URL received from backend:", window.APP_CONFIG.authUrl);
     </script>

@@ -201,3 +201,44 @@ def forbidden(e):
 # if __name__ == '__main__':
 #     app.run(debug=True, host='0.0.0.0', port=5000)
 
+@app.route('/demo_login', methods=['GET', 'POST'])
+def demo_login():
+    """
+    Demo login route for testing without Google OAuth.
+    Checks if the provided email is in the predefined USER_ROLES.
+    """
+    if request.method == 'POST':
+        # 1. Get and sanitize the email from the form
+        email = request.form.get('email', '').strip()
+
+        # 2. Check if the email is authorized
+        if email and email in USER_ROLES:
+            # 3. Log the user in by setting session variables
+            session['email'] = email
+            # 4. Create a dummy google_token structure
+            # This mimics the real token structure for access checks in get_user_access
+            # but won't work for actual Drive API calls.
+            session['google_token'] = {
+                'access_token': 'demo_access_token_placeholder',
+                'refresh_token': 'demo_refresh_token_placeholder',
+                # --- CRITICAL FIX: Removed trailing spaces from token_uri ---
+                'token_uri': 'https://oauth2.googleapis.com/token', # No trailing spaces
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET
+            }
+            print(f"✅ [DEMO] Login successful for {email}")
+            # 5. Redirect to the main index page
+            return redirect(url_for('index'))
+        else:
+            # 6. Handle failed login attempt
+            error_message = f"Demo login failed for '{email}'. Email not authorized or not in USER_ROLES."
+            print(f"❌ [DEMO] {error_message}")
+            # Pass the error message to the template for display
+            return render_template('index.html', error=error_message)
+
+    # --- GET request handling ---
+    # If someone navigates to /demo_login directly (GET), redirect to main page
+    # The demo login form is already on index.html
+    # Alternatively, you could render a separate template here.
+    return redirect(url_for('index'))
+# --- End of /demo_login route ---
