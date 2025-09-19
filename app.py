@@ -63,8 +63,9 @@ def login():
     )
     session['state'] = state
     print(f"🔐 [DEBUG] Generated Google Auth URL: {authorization_url}")
-    return render_template('login.html', auth_url=authorization_url)
-
+    # --- RENDER index.html INSTEAD ---
+    return render_template('index.html', auth_url=authorization_url)
+    
 @app.route('/callback')
 def callback():
     if 'state' not in session:
