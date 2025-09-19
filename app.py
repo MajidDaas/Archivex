@@ -1,38 +1,43 @@
-from flask import Flask, render_template, redirect, url_for, session, request, abort, flash, jsonify
+# app.py
+from flask import Flask, render_template, redirect, url_for, session, request, abort, jsonify
+# Import from google_auth_oauthlib.flow correctly
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 import os
 import json
-import tempfile
-from config import CONFIG, get_user_access, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, TABS
+from io import BytesIO
+
+# Import configuration and utilities
+from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, TABS, get_user_access
 from drive_utils import build_drive_service, search_files, upload_file
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-app.config['SESSION_TYPE'] = 'filesystem'
 
 # ⚠️ ONLY FOR LOCAL DEVELOPMENT — REMOVE IN PRODUCTION
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-# ✅ FIXED: NO TRAILING SPACES — CRITICAL FOR GOOGLE OAUTH TO WORK
+# --- Google OAuth2 Flow Setup ---
+# Corrected: No trailing spaces, scopes defined properly
 flow = Flow.from_client_config(
     client_config={
         "web": {
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",  # No trailing space
+            "token_uri": "https://oauth2.googleapis.com/token",      # No trailing space
             "redirect_uris": ["http://localhost:5000/callback"]
         }
     },
     scopes=[
         'openid',
         'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/drive.file'
-    ]
+        'https://www.googleapis.com/auth/drive.file' # Scope for uploading files
+    ],
+    redirect_uri='http://localhost:5000/callback'
 )
 
-# ============= HUMAN ROUTES =============
+# --- Routes ---
 
 @app.route('/')
 def index():
@@ -42,17 +47,15 @@ def index():
 
 @app.route('/login')
 def login():
-    try:
-        authorization_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true'
-        )
-        session['state'] = state
-        print(f"🔐 [DEBUG] Generated Google Auth URL: {authorization_url}")
-        return render_template('index.html', auth_url=authorization_url)  # ← REAL URL
-    except Exception as e:
-        print(f"❌ [ERROR] Failed to generate auth URL: {e}")
-        return "Login temporarily unavailable.", 500
+    # --- Corrected OAuth Flow ---
+    # `flow.authorization_url()` generates the URL with `response_type=code`
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true'
+    )
+    session['state'] = state
+    print(f"🔐 [DEBUG] Generated Google Auth URL: {authorization_url}")
+    return render_template('login.html', auth_url=authorization_url)
 
 @app.route('/callback')
 def callback():
@@ -62,6 +65,7 @@ def callback():
         abort(400, description="State mismatch.")
 
     try:
+        # --- Fetch Token and Get User Info ---
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
 
@@ -72,16 +76,21 @@ def callback():
             GOOGLE_CLIENT_ID
         )
 
+        # --- Store User Info and Credentials in Session ---
         session['email'] = id_info['email']
+        # Include client_id and client_secret for drive_utils
         session['google_token'] = {
             'access_token': credentials.token,
-            'refresh_token': credentials.refresh_token
+            'refresh_token': credentials.refresh_token,
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET
         }
 
+        # --- Check Access ---
         access = get_user_access(session['email'])
         if not access['tabs']:
             session.clear()
-            return jsonify({"error": "Access denied. Contact administrator."}), 403
+            return "Access denied. Contact administrator.", 403
 
         return redirect(url_for('index'))
 
@@ -95,7 +104,7 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# ============= JSON API ENDPOINTS =============
+# --- JSON API Endpoints ---
 
 @app.route('/api/user')
 def api_user():
@@ -153,10 +162,8 @@ def api_upload_file(tab_name):
         drive_service = build_drive_service(session['google_token'])
         folder_id = access['folder_map'].get(tab_name)
 
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            file.save(tmp.name)
-            uploaded_file = upload_file(drive_service, tmp.name, file.filename, folder_id)
-            os.unlink(tmp.name)
+        # Pass the file stream directly
+        uploaded_file = upload_file(drive_service, file.stream, file.filename, folder_id)
 
         return jsonify({
             "success": True,
@@ -170,6 +177,8 @@ def api_upload_file(tab_name):
         print(f"❌ [ERROR] Upload failed: {e}")
         return jsonify({"error": "Upload failed. Please try again."}), 500
 
+# --- Error Handlers ---
+
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "Endpoint not found"}), 404
@@ -179,5 +188,5 @@ def forbidden(e):
     return jsonify({"error": "Forbidden"}), 403
 
 if __name__ == '__main__':
-    os.makedirs('instance', exist_ok=True)
     app.run(debug=True, host='0.0.0.0', port=5000)
+
