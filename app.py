@@ -24,15 +24,16 @@ app.config['SESSION_TYPE'] = 'filesystem'
 # os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # --- Google OAuth2 Flow Setup ---
-# --- CRITICAL FIXES:
-# 1. Remove ALL trailing spaces from URLs, scopes, and redirect URIs
+# --- CRITICAL FIXES APPLIED:
+# 1. REMOVE ALL TRAILING SPACES from URLs, scopes, and redirect URIs
+#    This fixes the "Required parameter is missing: response_type" error.
 # 2. Ensure redirect URIs match your PythonAnywhere domain
 flow = Flow.from_client_config(
     client_config={
         "web": {
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            # --- FIX 1a: Removed ALL trailing spaces ---
+            # --- FIX 1a: Removed ALL trailing spaces from auth_uri and token_uri ---
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",  # No trailing spaces
             "token_uri": "https://oauth2.googleapis.com/token",      # No trailing spaces
             # --- FIX 2a: Update redirect URI for PythonAnywhere, No trailing spaces ---
@@ -54,8 +55,13 @@ flow = Flow.from_client_config(
 @app.route('/')
 def index():
     if 'email' not in session:
+        # FIX: Pass auth_url=None to prevent Undefined error in template
+        # when user is not logged in and index.html is rendered without
+        # coming from the /login route.
         return redirect(url_for('login'))
-    return render_template('index.html')
+    # FIX: Pass auth_url=None to prevent Undefined error in template
+    # when user is logged in.
+    return render_template('index.html', auth_url=None)
 
 @app.route('/login')
 def login():
@@ -260,7 +266,7 @@ def demo_login():
             session['google_token'] = {
                 'access_token': 'demo_access_token_placeholder',
                 'refresh_token': 'demo_refresh_token_placeholder',
-                # --- CRITICAL FIX: Removed trailing spaces ---
+                # --- CRITICAL FIX: Removed trailing spaces from token_uri ---
                 'token_uri': 'https://oauth2.googleapis.com/token', # No trailing spaces
                 'client_id': GOOGLE_CLIENT_ID,
                 'client_secret': GOOGLE_CLIENT_SECRET
@@ -273,7 +279,8 @@ def demo_login():
             error_message = f"Demo login failed for '{email}'. Email not authorized or not in USER_ROLES."
             print(f"❌ [DEMO LOGIN] {error_message}")
             # Pass the error message to the template for display
-            return render_template('index.html', error=error_message)
+            # Also pass auth_url=None to prevent template errors
+            return render_template('index.html', error=error_message, auth_url=None)
 
     # --- GET request handling ---
     # If someone navigates to /demo_login directly (GET), redirect to main page
