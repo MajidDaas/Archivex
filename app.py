@@ -4,37 +4,45 @@ from flask import Flask, render_template, redirect, url_for, session, request, a
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 import os
-import json
-from io import BytesIO
+# import json # Not used in this snippet
+# from io import BytesIO # Not used in this snippet
 
 # Import configuration and utilities
 from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SECRET_KEY, TABS, get_user_access
 from drive_utils import build_drive_service, search_files, upload_file
 
 app = Flask(__name__)
-app.secret_key = SECRET_KEY
+# Use the secret key from config.py, which loads from environment variables
+# Hardcoding it like this is less secure
+app.secret_key = SECRET_KEY # Use the one from config
 
 # ⚠️ ONLY FOR LOCAL DEVELOPMENT — REMOVE IN PRODUCTION
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+# This should ideally be handled by an environment check
+# os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # --- Google OAuth2 Flow Setup ---
-# Corrected: No trailing spaces, scopes defined properly
+# --- FIX 1: Remove ALL trailing spaces from URLs and scopes ---
+# --- FIX 2: Update redirect URIs for PythonAnywhere ---
 flow = Flow.from_client_config(
     client_config={
         "web": {
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
+            # --- FIX 1a: Removed trailing spaces ---
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",  # No trailing space
             "token_uri": "https://oauth2.googleapis.com/token",      # No trailing space
-            "redirect_uris": ["http://localhost:5000/callback"]
+            # --- FIX 2a: Update redirect URI for PythonAnywhere ---
+            "redirect_uris": ["https://majiddaas.pythonanywhere.com/callback"] # Match your domain
         }
     },
     scopes=[
         'openid',
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/drive.file' # Scope for uploading files
+        # --- FIX 1b: Removed trailing spaces from scopes ---
+        'https://www.googleapis.com/auth/userinfo.email', # No trailing space
+        'https://www.googleapis.com/auth/drive.file'    # No trailing space, Scope for uploading files
     ],
-    redirect_uri='http://localhost:5000/callback'
+    # --- FIX 2b: Update redirect_uri for PythonAnywhere ---
+    redirect_uri='https://majiddaas.pythonanywhere.com/callback' # Match your domain
 )
 
 # --- Routes ---
@@ -96,6 +104,7 @@ def callback():
 
     except Exception as e:
         print(f"❌ [ERROR] OAuth callback failed: {e}")
+        # It's better to flash a message or redirect to an error page
         session.clear()
         return "Authentication failed. Please try again.", 400
 
@@ -187,6 +196,7 @@ def not_found(e):
 def forbidden(e):
     return jsonify({"error": "Forbidden"}), 403
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# Remove or comment out the if __name__ == '__main__' block for PythonAnywhere
+# if __name__ == '__main__':
+#     app.run(debug=True, host='0.0.0.0', port=5000)
 
