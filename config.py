@@ -15,6 +15,7 @@ USER_ROLES = {
     "admin@example.com": ["meeting_minutes", "elections", "members"],
     "elections-team@example.com": ["elections"],
     "minutes-team@example.com": ["meeting_minutes"],
+    "GMan.GM725@gmail.com": ["meeting_minutes", "elections", "members"],
     # Add more users and their tabs here
 }
 
