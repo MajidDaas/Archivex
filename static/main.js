@@ -38,10 +38,7 @@ class OrgPortal {
 
         // --- AUTO-REDIRECT TO GOOGLE AUTH ---
         // This relies on `window.APP_CONFIG.authUrl` being set by the Flask template.
-        if (window.APP_CONFIG?.authUrl && !this.state?.user) {
-            console.log("🚀 [AUTO-REDIRECT] Redirecting to Google Auth...");
-            window.location.href = window.APP_CONFIG.authUrl;
-        }
+
     }
 
     bindEvents() {
