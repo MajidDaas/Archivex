@@ -13,8 +13,19 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
 
-# --- Helper: create a fresh OAuth2 flow ---
+# --- Configuration for local/production ---
 def create_flow():
+    # --- DYNAMICALLY DETERMINE REDIRECT URI BASED ON REQUEST ---
+    # This fixes the "Working outside of request context" error
+    host_url = request.host_url
+    is_local = 'localhost' in host_url or '127.0.0.1' in host_url
+    redirect_uri = (
+        "http://localhost:5000/callback" if is_local
+        else "https://majiddaas.pythonanywhere.com/callback" # Adjust for your production domain
+    )
+    
+    print(f"[FLOW] Host URL: {host_url}, Is Local: {is_local}, Redirect URI: {redirect_uri}")
+
     return Flow.from_client_config(
         client_config={
             "web": {
@@ -22,7 +33,7 @@ def create_flow():
                 "client_secret": GOOGLE_CLIENT_SECRET,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": ["https://majiddaas.pythonanywhere.com/callback"]
+                "redirect_uris": [redirect_uri]
             }
         },
         scopes=[
@@ -31,16 +42,20 @@ def create_flow():
             "https://www.googleapis.com/auth/userinfo.email",
             "https://www.googleapis.com/auth/drive.file"
         ],
-        redirect_uri="https://majiddaas.pythonanywhere.com/callback"
+        redirect_uri=redirect_uri
     )
 
 # --- Routes ---
 @app.route('/')
 def index():
+    # --- MAIN CHANGE: Render index.html directly, don't redirect to /login ---
+    # The JavaScript will handle showing the auth section if not logged in.
     if 'email' not in session:
-        return redirect(url_for('login'))
+        # Pass demo_users so the template can show the demo login options
+        return render_template('index.html', auth_url=None, demo_users=list(USER_ROLES.keys()))
     return render_template('index.html', auth_url=None)
 
+# The /login route is still needed for the "Login with Google" button's JS logic
 @app.route('/login')
 def login():
     flow = create_flow()
@@ -50,7 +65,8 @@ def login():
     )
     session['state'] = state
     print(f"[LOGIN] Auth URL: {authorization_url}")
-    return render_template('index.html', auth_url=authorization_url)
+    # Pass demo_users here too, in case someone navigates directly to /login
+    return render_template('index.html', auth_url=authorization_url, demo_users=list(USER_ROLES.keys()))
 
 @app.route('/callback')
 def callback():
@@ -61,18 +77,15 @@ def callback():
         abort(400, description="State missing from request URL")
     if session['state'] != request_state:
         abort(400, description="State mismatch")
-
     try:
         flow = create_flow()
         flow.fetch_token(authorization_response=request.url)
         credentials = flow.credentials
-
         id_info = id_token.verify_oauth2_token(
             credentials.id_token,
             Request(),
             GOOGLE_CLIENT_ID
         )
-
         session['email'] = id_info['email']
         session['google_token'] = {
             "access_token": credentials.token,
@@ -80,25 +93,26 @@ def callback():
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET
         }
-
         access = get_user_access(session['email'])
         if not access['tabs']:
             session.clear()
-            return "Access denied. Contact administrator.", 403
-
+            # Pass demo_users for consistency if error page is shown via template
+            return render_template('index.html', error="Access denied. No tabs assigned. Contact administrator.", demo_users=list(USER_ROLES.keys())), 403
         return redirect(url_for('index'))
-
     except Exception as e:
         print(f"[CALLBACK] OAuth failed: {e}")
         session.clear()
-        return redirect(url_for('index', error="Authentication failed. Please try again."))
+        # Pass demo_users for consistency if error page is shown via template
+        return redirect(url_for('index', error="Authentication failed. Please try again.", demo_users=list(USER_ROLES.keys())))
 
 @app.route('/logout')
 def logout():
     email = session.get('email')
     session.clear()
     print(f"[LOGOUT] {email} logged out")
-    return redirect(url_for('index'))
+    # Redirect to index, which will now show the login page
+    # Pass demo_users so the login page is shown correctly
+    return redirect(url_for('index', demo_users=list(USER_ROLES.keys())))
 
 # --- JSON API Endpoints ---
 @app.route('/api/user')
@@ -132,7 +146,7 @@ def api_tab_files(tab_name):
         return jsonify({"files": files})
     except Exception as e:
         print(f"[API/FILES] Failed: {e}")
-        return jsonify({"error": "Failed to load files"}), 500
+        return jsonify({"error": "Failed to load files from Google Drive"}), 500
 
 @app.route('/api/tab/<tab_name>/upload', methods=['POST'])
 def api_upload_file(tab_name):
@@ -165,17 +179,25 @@ def api_upload_file(tab_name):
 # --- Error Handlers ---
 @app.errorhandler(400)
 def bad_request(e):
-    return jsonify({"error": f"Bad Request: {getattr(e, 'description', 'Bad Request')}"}), 400
+    # Pass demo_users for consistency
+    return render_template('index.html', error=f"Bad Request: {getattr(e, 'description', 'Bad Request')}", demo_users=list(USER_ROLES.keys())), 400
 
 @app.errorhandler(403)
 def forbidden(e):
-    return jsonify({"error": "Forbidden"}), 403
+    # Pass demo_users for consistency
+    return render_template('index.html', error="Forbidden. Access denied.", demo_users=list(USER_ROLES.keys())), 403
 
 @app.errorhandler(404)
 def not_found(e):
-    return jsonify({"error": "Endpoint not found"}), 404
+    # Pass demo_users for consistency
+    return render_template('index.html', error="Page not found.", demo_users=list(USER_ROLES.keys())), 404
 
-# --- Demo Login Route ---
+@app.errorhandler(500)
+def internal_error(e):
+    # Pass demo_users for consistency
+    return render_template('index.html', error="Internal server error.", demo_users=list(USER_ROLES.keys())), 500
+
+# --- Improved Demo Login Route ---
 @app.route('/demo_login', methods=['GET', 'POST'])
 def demo_login():
     if request.method == 'POST':
@@ -195,14 +217,14 @@ def demo_login():
         else:
             error_message = f"Demo login failed for '{email}'. Email not authorized."
             print(f"[DEMO LOGIN] {error_message}")
-            return render_template('index.html', error=error_message, auth_url=None)
-    # GET request
+            # Pass demo_users so the login page is shown with options
+            return render_template('index.html', error=error_message, auth_url=None, demo_users=list(USER_ROLES.keys()))
+
+    # GET request - Redirect back to main index, which will show the login page with demo users
     print("[DEMO LOGIN] GET request, redirecting to index")
-    return redirect(url_for('index'))
+    return redirect(url_for('index', demo_users=list(USER_ROLES.keys())))
 
-# --- End of app.py ---
-# Remove the below if deploying on PythonAnywhere
-# if __name__ == '__main__':
-#     app.run(debug=True, host='0.0.0.0', port=5000)
-
+# --- Enable local running ---
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000) # Use debug=False in production
 

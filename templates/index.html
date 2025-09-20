@@ -10,82 +10,101 @@
 <body>
     <div id="app" class="container">
         <!-- Auth Section -->
-        <!-- Initially hidden, shown by JS if user is not authenticated -->
-        <div id="auth-section" class="auth-section" style="display: none;">
-            <h1>🔐 Organization File Portal</h1>
-            <p>Secure access to your team’s documents.</p>
-            {% if error %}
-                <div class="error-message">{{ error }}</div>
-            {% endif %}
-            <!-- The login button's click handler is in main.js -->
-            <a id="login-btn" class="btn btn-primary">Login with Google</a>
-            
-            <!-- Demo Login Form -->
-            <div class="demo-login-form">
-                <p><strong>For Testing (Demo Login):</strong></p>
-                <form method="post" action="/demo_login">
-                    <input type="email" name="email" placeholder="Enter test email" required>
-                    <button type="submit" class="btn btn-secondary">Demo Login</button>
-                </form>
+        <section id="auth-section" class="auth-section" style="display: none;">
+            <div class="auth-card">
+                <h1 class="auth-title">🔐 Organization File Portal</h1>
+                <p class="auth-subtitle">Secure access to your team’s documents.</p>
+
+                {% if error %}
+                    <div class="flash-message error">{{ error }}</div>
+                {% endif %}
+
+                <!-- Main Google Login Button -->
+                <a id="login-btn" class="btn btn-primary btn-large">Login with Google</a>
+
+                <!-- Demo Login Section -->
+                <div class="demo-login-section">
+                    <h2 class="demo-title">🧪 Demo Login (For Testing)</h2>
+                    <p class="demo-description">Select a predefined user to simulate login:</p>
+
+                    {% if demo_users %}
+                        <form method="post" action="/demo_login" class="demo-form">
+                            <select name="email" id="demo-email-select" class="form-input" required>
+                                <option value="" disabled selected>Select a test user</option>
+                                {% for user_email in demo_users %}
+                                    <option value="{{ user_email }}">{{ user_email }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-secondary">Demo Login</button>
+                        </form>
+                    {% else %}
+                        <p class="demo-description">No demo users configured.</p>
+                    {% endif %}
+                </div>
             </div>
-        </div>
+        </section>
 
         <!-- Main App -->
-        <!-- Initially hidden, shown by JS if user is authenticated -->
-        <div id="main-app" style="display: none;">
-            <header>
-                <h1>📁 Organization File Portal</h1>
-                <button id="logout-btn" class="logout-btn">Logout</button>
+        <main id="main-app" class="main-app" style="display: none;">
+            <header class="app-header">
+                <h1 class="app-title">📁 Organization File Portal</h1>
+                <button id="logout-btn" class="btn btn-outline">Logout</button>
             </header>
 
-            <div id="user-email" class="user-email"></div>
+            <div id="user-email" class="user-info"></div>
 
-            <!-- Flash Messages -->
+            <!-- Flash Messages Container -->
             <div id="flash-container" class="flash-messages"></div>
 
-            <!-- Tabs -->
-            <div id="tabs-container" class="tabs"></div>
+            <!-- Navigation Tabs -->
+            <nav id="tabs-container" class="tabs"></nav>
 
             <!-- Active Tab Content -->
-            <div id="tab-content">
-                <div id="tab-header">
-                    <h2 id="tab-title"></h2>
-                    <p id="tab-description"></p>
-                </div>
+            <section id="tab-content" class="tab-content">
+                <header id="tab-header" class="tab-header">
+                    <h2 id="tab-title" class="tab-title"></h2>
+                    <p id="tab-description" class="tab-description"></p>
+                </header>
 
-                <!-- Upload -->
-                <div class="upload-section">
-                    <input type="file" id="file-upload" />
-                    <button id="upload-btn" class="btn btn-primary">Upload</button>
-                </div>
+                <!-- Upload Section -->
+                <section class="upload-section">
+                    <div class="form-group">
+                        <label for="file-upload" class="upload-label">Choose a file:</label>
+                        <input type="file" id="file-upload" class="form-input-file" />
+                    </div>
+                    <button id="upload-btn" class="btn btn-primary">Upload File</button>
+                </section>
 
-                <!-- Search -->
-                <div class="search-box">
-                    <input type="text" id="search-input" placeholder="Search inside files..." />
-                    <button id="search-btn">Search</button>
-                </div>
+                <!-- Search Section -->
+                <section class="search-section">
+                    <div class="form-group">
+                        <input type="text" id="search-input" placeholder="Search files by name or content..." class="form-input" />
+                        <button id="search-btn" class="btn btn-search">🔍 Search</button>
+                    </div>
+                </section>
 
-                <!-- Files List -->
-                <div id="loading" style="display: none;">Loading files...</div>
-                <ul id="files-list" class="file-list"></ul>
-                <div id="no-files" style="display: none;">No files found.</div>
-            </div>
-        </div>
+                <!-- Files List Area -->
+                <section class="files-section">
+                    <div id="loading" class="loading-indicator" style="display: none;">
+                        <span class="spinner"></span> Loading files...
+                    </div>
+                    <ul id="files-list" class="file-list"></ul>
+                    <div id="no-files" class="no-files-message" style="display: none;">
+                        <p>📭 No files found in this folder.</p>
+                        <p>Try uploading a file or adjusting your search.</p>
+                    </div>
+                </section>
+            </section>
+        </main>
     </div>
 
     <!-- ✅ PASS AUTH URL FROM FLASK TO JAVASCRIPT -->
-    <!-- This script block MUST come before main.js is loaded -->
     <script>
-        // Define the global APP_CONFIG object
         window.APP_CONFIG = {
-            // Use Jinja2's tojson filter for safe serialization
-            // If auth_url is not provided by Flask, it will be null
             authUrl: {{ auth_url|tojson }}
         };
         console.log("🔧 [DEBUG] Auth URL received from backend:", window.APP_CONFIG.authUrl);
     </script>
-
-    <!-- Load main app logic -->
     <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
 </html>
